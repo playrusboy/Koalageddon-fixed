@@ -247,8 +247,16 @@ char* makeCStringCopy(string src)
 
 wstring getReg(string key, string valueName)
 {
-	winreg::RegKey regKey{ HKEY_LOCAL_MACHINE, stow(key).c_str(), KEY_WOW64_32KEY | KEY_READ };
-	return regKey.GetStringValue(stow(valueName));
+	try
+	{
+		winreg::RegKey regKey{ HKEY_LOCAL_MACHINE, stow(key).c_str(), KEY_WOW64_32KEY | KEY_READ };
+		return regKey.GetStringValue(stow(valueName));
+	}
+	catch (const winreg::RegException&)
+	{
+		winreg::RegKey regKey{ HKEY_LOCAL_MACHINE, stow(key).c_str(), KEY_WOW64_64KEY | KEY_READ };
+		return regKey.GetStringValue(stow(valueName));
+	}
 }
 
 // Should be called only from InstallationWizard, since writing to HKLM requires admin rights.

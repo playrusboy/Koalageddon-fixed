@@ -84,7 +84,7 @@ void askForAction(
 	for (const auto& [key, platform] : platforms) {
 		if (platform.name == stow(STEAM_NAME))
 			defaultButton = key;
-		std::wstring buttonText = platform.name + (platform.installed ? L" [+]" : L" [-]");
+		std::wstring buttonText = platform.name + (platform.isInstalled() ? L" [+]" : L" [-]");
 		buttonNames.push_back(std::move(buttonText));
 		radioButtons.push_back(TASKDIALOG_BUTTON{ key, buttonNames.back().c_str() });
 	}

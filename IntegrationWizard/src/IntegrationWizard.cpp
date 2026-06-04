@@ -35,37 +35,43 @@ void showPostActionReport(const Action action)
 
 void installIntegration(PlatformInstallation& platform)
 {
-	const auto integrationDLL = platform.architecture == Architecture::x32 ? INTEGRATION_32 : INTEGRATION_64;
-	const auto integrationDllPath = getInstallDirPath() / integrationDLL;
-	const auto versionDLLPath = platform.path / "version.dll";
-	logger->debug(
-		"Integration DLL path: '{}', Destination: '{}'",
-		integrationDllPath.string(), versionDLLPath.string()
-	);
+	for (auto& target : platform.targets)
+	{
+		const auto integrationDLL = target.architecture == Architecture::x32 ? INTEGRATION_32 : INTEGRATION_64;
+		const auto integrationDllPath = getInstallDirPath() / integrationDLL;
+		const auto versionDLLPath = target.path / "version.dll";
+		logger->debug(
+			"Integration DLL path: '{}', Destination: '{}'",
+			integrationDllPath.string(), versionDLLPath.string()
+		);
 
-	// Terminate the process to release a possible lock on the files
-	killProcess(platform.process);
+		// Terminate the process to release a possible lock on the files
+		killProcess(target.process);
 
-	copy_file(integrationDllPath, versionDLLPath, copy_options::overwrite_existing);
-	platform.installed = true;
+		copy_file(integrationDllPath, versionDLLPath, copy_options::overwrite_existing);
+		target.installed = true;
 
-	// TODO: This code is temporary.
-	// It is meant to clean-up integration artifacts from previous versions.
-	// It needs to be remove after several releases.
-	const auto originalDLLPath = platform.path / "version_o.dll";
-	DeleteFile(originalDLLPath.c_str());
+		// TODO: This code is temporary.
+		// It is meant to clean-up integration artifacts from previous versions.
+		// It needs to be remove after several releases.
+		const auto originalDLLPath = target.path / "version_o.dll";
+		DeleteFile(originalDLLPath.c_str());
+	}
 }
 
 void removeIntegration(PlatformInstallation& platform)
 {
-	const auto versionDLLPath = platform.path / "version.dll";
-	logger->debug("Version DLL path: '{}'",versionDLLPath.string());
+	for (auto& target : platform.targets)
+	{
+		const auto versionDLLPath = target.path / "version.dll";
+		logger->debug("Version DLL path: '{}'", versionDLLPath.string());
 
-	// Terminate the process to release potential locks on files
-	killProcess(platform.process);
+		// Terminate the process to release potential locks on files
+		killProcess(target.process);
 
-	DeleteFile(versionDLLPath.c_str());
-	platform.installed = false;
+		DeleteFile(versionDLLPath.c_str());
+		target.installed = false;
+	}
 }
 
 
@@ -127,6 +133,7 @@ map<string, PlatformRegistry> platformRegMap = {
 map<int, PlatformInstallation> IntegrationWizard::getInstalledPlatforms()
 {
 	map<int, PlatformInstallation> installedPlatforms;
+	map<wstring, int> nameToId;
 
 	int platformID = 1000;
 	for(const auto& [name, platformRegistry] : platformRegMap)
@@ -138,17 +145,38 @@ map<int, PlatformInstallation> IntegrationWizard::getInstalledPlatforms()
 			auto platformPath = absolute(getReg(key, value));
 
 			// Epic binaries are located in sub-directories
-			if(name == EPIC_GAMES_32_NAME)
-				platformPath /= R"(Launcher\Portal\Binaries\Win32)";
-			else if(name == EPIC_GAMES_64_NAME)
-				platformPath /= R"(Launcher\Portal\Binaries\Win64)";
+			if(name == EPIC_GAMES_32_NAME || name == EPIC_GAMES_64_NAME)
+			{
+				if (!stringsAreEqual(platformPath.filename().string(), "Launcher"))
+					platformPath /= "Launcher";
+
+				if (name == EPIC_GAMES_32_NAME)
+					platformPath /= R"(Portal\Binaries\Win32)";
+				else
+					platformPath /= R"(Portal\Binaries\Win64)";
+			}
 			else if(name == ORIGIN_NAME || name==EA_DESKTOP_NAME) // Origin & EA Desktop store path to exe
 				platformPath = platformPath.parent_path();
 
 			if (std::filesystem::exists(platformPath)) {
 				const auto versionDLLPath = platformPath / "version.dll";
 				const auto isInstalled = std::filesystem::exists(versionDLLPath);
-				installedPlatforms[platformID++] = PlatformInstallation{ platformPath, architecture, process, stow(name), isInstalled };
+
+				auto displayName = stow(name);
+				if (name == EPIC_GAMES_32_NAME || name == EPIC_GAMES_64_NAME)
+					displayName = L"Epic Games";
+
+				if (nameToId.count(displayName)) {
+					installedPlatforms[nameToId[displayName]].targets.push_back({ platformPath, architecture, process, isInstalled });
+				}
+				else {
+					PlatformInstallation platform;
+					platform.name = displayName;
+					platform.targets.push_back({ platformPath, architecture, process, isInstalled });
+					installedPlatforms[platformID] = platform;
+					nameToId[displayName] = platformID;
+					platformID++;
+				}
 			}
 		} catch(winreg::RegException& e)
 		{ // This is normal if platform is not installed

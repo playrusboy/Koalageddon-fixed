@@ -21,11 +21,20 @@ enum class Architecture { x32, x64 };
 
 struct PlatformInstallation
 {
-	path path;
-	Architecture architecture = Architecture::x32;
-	string process;
+	struct Target {
+		path path;
+		Architecture architecture;
+		string process;
+		bool installed;
+	};
+
 	wstring name;
-	bool installed;
+	vector<Target> targets;
+
+	bool isInstalled() const {
+		for (const auto& t : targets) if (t.installed) return true;
+		return false;
+	}
 };
 
 struct PlatformRegistry

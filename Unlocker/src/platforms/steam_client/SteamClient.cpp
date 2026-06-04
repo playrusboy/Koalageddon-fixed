@@ -108,20 +108,41 @@ void SteamClient::platformInit() {
 		return;
 	}
 
-	fetchAndCachePatterns();
-	readCachedPatterns();
+	// Execute blocking operations in a new thread
+	std::thread hooksThread([this] {
+		bool loaded = false;
 
-	if (!patterns.empty()) {
-		installHooks();
-	}
-	else {
-		showFatalError(
-			"Failed to initialize Steam platform since steamclient-patterns.json "
-			"was not found in cache directory and could not be fetched from online source.",
-			false,
-			false
-		);
-	}
+		// 1. Trying to update file and read
+		if (fetchAndCachePatterns()) {
+			readCachedPatterns();
+			loaded = !patterns.empty();
+
+			if (!loaded) {
+				logger->error("Patterns were fetched but failed to parse/read");
+			}
+		} else {
+			logger->warn("Failed to fetch patterns, trying to use cached file");
+		}
+
+		// 2. If couldn't update – read from local file
+		if (!loaded) {
+			readCachedPatterns();
+			loaded = !patterns.empty();
+		}
+
+		// 3. Install hooks
+		if (loaded) {
+			installHooks();
+		} else {
+			showFatalError(
+				"Failed to initialize Steam platform since steamclient-patterns.json "
+				"was not found in cache directory and could not be fetched from online source.",
+				false,
+				false
+			);
+		}
+		});
+	hooksThread.detach();
 }
 
 string SteamClient::getPlatformName() {

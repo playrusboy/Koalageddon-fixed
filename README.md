@@ -1,4 +1,4 @@
-# Moved to https://github.com/KA4I/Koalageddon
+# I am updating this fork for now as the other one went down
 
 # Purpose of this fork
 I created this fork to make Koalageddon work for the new Steam Families system. Credits to GreenLuma
